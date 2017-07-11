@@ -1,0 +1,275 @@
+@using System.Collections.Generic;
+@{
+    Layout = "~/Views/Shared/_WebRTCLayout.cshtml";
+    string title = Languages.Get("Call");
+
+    ViewBag.Title = title;
+    ViewBag.Header = title;
+
+    List<WebRTCLib.WebRTCRoom> rooms = ViewBag.Rooms;
+    string roomNameType = rooms[0].Name;
+    string connects = "";
+
+    if (rooms.Count > 1)
+    {
+        List<string> connectWith = new List<string>();
+        foreach (var room in rooms)
+        {
+            connectWith.Add(room.ParticipantName);
+        }
+        connects = String.Join(", ", connectWith);
+    }
+    else
+    {
+        WebRTCLib.WebRTCRoom room = rooms[0];
+        connects = room.ParticipantName;
+        if (WebRTCLib.Utils.Helper.CurrentUser.User.Id != room.OwnerToken)
+        {
+            connects = room.OwnerName;
+        }
+    }
+}
+
+<div class="webrtcHeader">
+    <h4>@Languages.Get("Connect With"): @connects</h4>
+
+    <span id="spanCurrentTime" class="time"></span>
+    <button type="button" class="btn btn-success btn-sm" title="@Languages.Get("End Call and Go to Dashboard")" id="btnEndCall">
+        <span class="glyphicon glyphicon-off"></span>
+    </button>
+    <button type="button" class="btn btn-success btn-sm" title="@Languages.Get("Text Chat")" id="btnChangeFloatTextChat">
+        <span class="glyphicon glyphicon-comment"></span>
+    </button>
+</div>
+
+<input type="hidden" id="hiddenMyPhoto" value="@WebRTCLib.Utils.Helper.CurrentUser.User.Photo" />
+<input type="hidden" id="hiddenMyUserName" value="@WebRTCLib.Utils.Helper.CurrentUser.User.UserName" />
+<input type="hidden" id="hiddenRoomToken" value="@ViewBag.RoomToken" />
+<input type="hidden" id="hiddenRoomNameType" value="@roomNameType"/>
+       
+<div class="col-md-12 webrtcBody">
+    <div class="col-md-3" id="divVideoPanel">
+        <video id="client-video" data-type="client" muted style="width:100%;"></video>
+        @foreach (var room in rooms)
+        {
+            <div class="divRemoteVideoContainer">
+                <div class="rvHeader">
+                    <span style="font-size:16px;">@Languages.Get("Connecting With") @String.Format("{0}", WebRTCLib.Utils.Helper.CurrentUser.User.Id == room.OwnerToken ? room.ParticipantName : room.OwnerName)</span>
+                    <span style="font-size:16px;position:absolute;right:5px;" id="spanTimeDuration-@room.ID">0S</span>
+                </div>
+                <video id="@room.ID" autoplay style="width:100%;display:none;"
+                       data-type="remote"
+                       data-userid="@WebRTCLib.Utils.Helper.CurrentUser.User.Id"
+                       data-ownertoken="@room.OwnerToken"
+                       data-participantotken="@room.ParticipantToken"
+                       data-roomtoken="@room.ID"></video>
+                <div id="div-@room.ID" class="divRemoteVideo">                   
+                    <img src="/Content/Images/loading.gif" />
+                </div>
+                <div id="div-div-@room.ID" class="divRemoteVideo" style="display:none;">
+                    <span>@Languages.Get("No Response")</span>
+                    <input type="button" value="@Languages.Get("Reconnect")" class="btn btn-success" id="div-reconnect-@room.ID" />
+                </div>
+            </div>
+        }
+    </div>
+
+    <div class="col-md-9" id="divCanvasPanel">
+        <div style="margin:10px 10px 10px 10px;">
+            <input type="button" value="@Languages.Get("Start Draw Canvas")" class="btn btn-primary" id="btnStartDrawCanvas" />
+            @*<input type="button" value="Open File" class="btn btn-success" id="btnOpenCanvasPicture" />*@ 
+            
+            <div class="dropdown" style="display:inline-block;">
+                <button type="button" class="btn btn-success dropdown-toggle" id="dropdownMenu1" data-toggle="dropdown">@Languages.Get("Open File")<span class="caret"></span></button>
+                <ul class="dropdown-menu" role="menu" aria-labelledby="dropdownMenu1">
+                    <li role="presentation">
+                        <a role="menuitem" tabindex="-1" href="javascript:void(0);" id="btnOpenCanvasPicture">@Languages.Get("Upload File")</a>
+                    </li>
+                    <li role="presentation">
+                        <a role="menuitem" tabindex="-1" href="javascript:void(0);" id="btnChooseFromFileLibrary">@Languages.Get("Choose From File Library")</a>
+                    </li>
+                </ul>
+            </div>
+                       
+            <input type="button" value="@Languages.Get("Save Canvas")" class="btn btn-success" id="btnSaveCanvasArea"/>
+
+            <select id="selectPdfImageList" class="form-control" style="display:inline-block;width:150px;margin-left:5px;"></select>
+
+            <input type="button" value="Submit Change" style="float:right;display:none;" class="btn btn-success" id="btnSumbitCanvasArea">
+        </div>
+        <div class="webrtcPaint">            
+            <iframe src="~/Scripts/plugin/wPaint-2.5.0/index.html?date=@DateTime.Now.ToString("yyyyMMddHHmmssffff")" id="iframeCanvasArea" name="iframeCanvasArea"></iframe>
+            <div class="divCoverPanel" id="divCoverPanel" style="width:98%;cursor:no-drop;">
+                <h1>@Languages.Get("Canvas was Locked")</h1>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-3" style="display:none;" id="divTextChatPanel">
+        <div id="txtLog" style="height: 450px; width: 100%; background-color: #ECE9E9;overflow-y:auto;"></div>
+        <div style="margin-top:5px;margin-bottom:5px;">
+            <textarea id="txtMessage" rows="5" class="form-control"></textarea>
+        </div>
+        <div style="text-align:right;">
+            <button type="button" class="btn btn-primary" title="@Languages.Get("Send emoticon")" style="margin-right:5px;" onclick="$('#modalEmocicon').modal('show');">
+                <img src="/Content/emoticons/e01.png" style="height:20px;"/>
+            </button>
+
+            <button type="button" class="btn btn-primary" title="@Languages.Get("Send attachment, such as image, pdf")..." style="" onclick="$('#modalUploadAttachment').modal('show');">
+                <span class="glyphicon glyphicon-paperclip"></span>
+            </button>
+            <input type="button" class="btn btn-success" value="@Languages.Get("Send")" id="btnSendMessage" />
+        </div>
+        @*<div style="margin-top:5px;">
+            <div class="col-md-10" style="padding-left:0px;padding-right:0px;">
+                <div class="input-group">
+                    <input type="text" class="form-control" id="txtMessage" />
+                    <span class="input-group-btn">
+                        <button type="button" class="btn btn-primary" title="Send Attachment, such as image,doc..." style="" onclick="$('#modalUploadAttachment').modal('show');">
+                            <span class="glyphicon glyphicon-paperclip"></span>
+                        </button>
+                    </span>
+                </div>
+            </div>
+            <div class="col-md-2">
+                <input type="button" class="btn btn-success" value="Send" id="btnSendMessage" />
+            </div>
+        </div>*@
+    </div>
+</div>
+
+        
+
+<!--Modal-->
+<div class="modal fade" id="modalUploadAttachment" tabindex="-1" role="dialog" aria-labelledby="modalUploadAttachmentLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
+                <h4 class="modal-title" id="modalUploadAttachmentLabel">@Languages.Get("Upload File")</h4>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <input type="file" id="attachment" name="file" />
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-default" data-dismiss="modal">@Languages.Get("Cancel")</button>
+            </div>
+        </div><!-- /.modal-content -->
+    </div>
+</div>
+<!-- /.modal -->
+
+<!--Modal-->
+<div class="modal fade" id="modalOpenPicture" tabindex="-1" role="dialog" aria-labelledby="modalOpenPictureLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
+                <h4 class="modal-title" id="modalOpenPictureLabel">Open File, Only Support jpg, png and pdf</h4>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <input type="file" id="openfile" name="file" />
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-default" data-dismiss="modal">@Languages.Get("Cancel")</button>
+            </div>
+        </div><!-- /.modal-content -->
+    </div>
+</div>
+<!-- /.modal -->
+
+
+<!--Modal Save Canvas-->
+<div class="modal fade" id="modalSaveCanvas" tabindex="-1" role="dialog" aria-labelledby="modalSaveCanvasLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
+                <h4 class="modal-title" id="modalSaveCanvasLabel">@Languages.Get("Save Canvas")</h4>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="control-label">@Languages.Get("Image's Name"):</label><br />
+                    <input type="text" class="form-control" id="txtSaveCanvasFileName" />
+                    <span style="color:red;">* @Languages.Get("If name is empty, will set name by using time")</span>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-default" data-dismiss="modal">@Languages.Get("Cancel")</button>
+                <button type="button" class="btn btn-primary" id="submitSaveCanvasFileLibrary" data-type="FileLibrary">@Languages.Get("Save to File Library")</button>
+                <button type="button" class="btn btn-primary" id="submitSaveCanvasDownload" data-type="Download">@Languages.Get("Download")</button>
+            </div>
+        </div><!-- /.modal-content -->
+    </div>
+</div>
+<!-- /.modal -->
+
+
+<!--Modal Add Marker-->
+<div class="modal fade" id="modalEmocicon" tabindex="-1" role="dialog" aria-labelledby="modalEmociconLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
+                <h4 class="modal-title" id="modalEmociconLabel">@Languages.Get("Send emoticon")</h4>
+            </div>
+            <div class="modal-body">
+                <div class="form-group mapIcon">                    
+                    <div>
+                        <img src="/Content/emoticons/e01.png" data-icon="e01" />
+                        <img src="/Content/emoticons/e02.png" data-icon="e02" />
+                        <img src="/Content/emoticons/e03.png" data-icon="e03" />
+                        <img src="/Content/emoticons/e04.png" data-icon="e04" />
+                        <img src="/Content/emoticons/e05.png" data-icon="e05" />
+                        <img src="/Content/emoticons/e06.png" data-icon="e06" />
+                        <img src="/Content/emoticons/e07.png" data-icon="e07" />
+                        <img src="/Content/emoticons/e08.png" data-icon="e08" />
+                        <img src="/Content/emoticons/e09.png" data-icon="e09" />
+                        <img src="/Content/emoticons/e10.png" data-icon="e10" />
+                    </div>
+                    <div>
+                        <img src="/Content/emoticons/e11.png" data-icon="e11" />
+                        <img src="/Content/emoticons/e12.png" data-icon="e12" />
+                        <img src="/Content/emoticons/e13.png" data-icon="e13" />
+                        <img src="/Content/emoticons/e14.png" data-icon="e14" />
+                        <img src="/Content/emoticons/e15.png" data-icon="e15" />
+                        <img src="/Content/emoticons/e16.png" data-icon="e16" />
+                        <img src="/Content/emoticons/e17.png" data-icon="e17" />
+                        <img src="/Content/emoticons/e18.png" data-icon="e18" />
+                        <img src="/Content/emoticons/e19.png" data-icon="e19" />
+                        <img src="/Content/emoticons/e20.png" data-icon="e20" />
+                    </div>
+                    <div>
+                        <img src="/Content/emoticons/e21.png" data-icon="e21" />
+                        <img src="/Content/emoticons/e22.png" data-icon="e22" />
+                        <img src="/Content/emoticons/e23.png" data-icon="e23" />
+                        <img src="/Content/emoticons/e24.png" data-icon="e24" />
+                        <img src="/Content/emoticons/e25.png" data-icon="e25" />
+                        <img src="/Content/emoticons/e26.png" data-icon="e26" />
+                        <img src="/Content/emoticons/e27.png" data-icon="e27" />
+                        <img src="/Content/emoticons/e28.png" data-icon="e28" />
+                        <img src="/Content/emoticons/e29.png" data-icon="e29" />
+                        <img src="/Content/emoticons/e30.png" data-icon="e30" />
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-default" data-dismiss="modal">@Languages.Get("Cancel")</button>               
+            </div>
+        </div><!-- /.modal-content -->
+    </div>
+</div>
+
+<div style="display:none;">
+    <img id="imgCanvasAreaImageData" src="" />
+</div>
+
+<div id="divDurationCallAudio">
+    <audio src="~/Content/wechat_video_sounds.mp3" autoplay loop></audio>
+</div>
+
+@Html.Partial("_ChooseFile")
