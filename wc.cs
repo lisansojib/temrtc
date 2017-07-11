@@ -1,54 +1,60 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Security.Claims;
-using System.Threading.Tasks;
-using System.Web;
 using System.Web.Mvc;
 using Microsoft.AspNet.Identity;
-using Microsoft.AspNet.Identity.EntityFramework;
-using Microsoft.Owin.Security;
-using WebRTC.Models;
-using WebRTCLib;
-using WebRTC.Filters;
+using WebRTC.Data.Abstracts;
+using WebRTC.Core.Entities;
+using System.Data.Entity;
 
 namespace WebRTC.Controllers
-{    
-    [LoginRequired]
-    public class WebRTCController : Controller
+{
+    [Authorize]
+    public class WebRTCController : BaseController
     {
-        Entities entities = null;
+        private readonly IWebRTCRoomRepository _roomRepository;
+        private readonly IUserRepository _userRepository;
+        private readonly IWebRTCSDPMessageRepository _sdpMessageRepository;
+        private readonly IWebRTCCandidatesTableRepository _candidateRepository;
+        private readonly IChatMessageRepository _chatMessageRepsitory;
 
-        public WebRTCController()
+        public WebRTCController(
+            IWebRTCRoomRepository roomRepository,
+            IUserRepository userRepository,
+            IWebRTCSDPMessageRepository sdpMessageRepository,
+            IWebRTCCandidatesTableRepository candidateRepository,
+            IChatMessageRepository chatMessageRepsitory)
         {
-            this.entities = new Entities();
+            _roomRepository = roomRepository;
+            _userRepository = userRepository;
+            _sdpMessageRepository = sdpMessageRepository;
+            _candidateRepository = candidateRepository;
+            _chatMessageRepsitory = chatMessageRepsitory;
         }
 
         [HttpPost]
         public JsonResult MakeACall(string callee_user_id)
         {
-            Users callee = entities.Users.FirstOrDefault(t => t.Id == callee_user_id);
-            string[] parts = new string[] { WebRTCLib.Utils.Helper.CurrentUser.User.UserName, callee.UserName };
+            var callee = UserManager.FindById(callee_user_id);
+            string[] parts = new string[] { UserName, callee.UserName };
 
             string token = Guid.NewGuid().ToString();
-            WebRTCRoom room = new WebRTCRoom()
+            var room = new WebRTCRoom
             {
-                ID = token,
+                Id = token,
                 Token = token,
                 Name = "Single-Call-Room",
                 SharedWith = "public",
                 Status = "available",
                 LastUpdated = DateTime.Now,
-                OwnerName = WebRTCLib.Utils.Helper.CurrentUser.User.UserName,
-                OwnerToken = WebRTCLib.Utils.Helper.CurrentUser.User.Id,
+                OwnerName = UserName,
+                OwnerToken = UserId,
                 ParticipantName = callee.UserName,
                 ParticipantToken = callee.Id,
-                CreateOn = DateTime.Now,
-                CreateOnStr = DateTime.Now.ToString("yyyy-MM-dd"),
-                Participants = String.Join(",", parts),
+                Participants = string.Join(",", parts),
             };
-            entities.WebRTCRoom.Add(room);
-            entities.SaveChanges();
+
+            _roomRepository.Save(room);
 
             return Json(room, JsonRequestBehavior.AllowGet);
         }
@@ -57,37 +63,38 @@ namespace WebRTC.Controllers
         public JsonResult MakeMMCall(string callee_user_id_list)
         {
             string[] callee_id_list = callee_user_id_list.Split(new string[] { "," }, StringSplitOptions.RemoveEmptyEntries);
-            List<Users> callee_list = entities.Users.Where(t => callee_id_list.Contains(t.Id)).ToList<Users>();
+            var callee_list = _userRepository.GetAllUsers(callee_id_list).ToList();
 
             string[] parts = new string[callee_list.Count + 1];
-            parts[0] = WebRTCLib.Utils.Helper.CurrentUser.User.UserName;
+            parts[0] = UserName;
             for (int i = 1; i <= callee_list.Count; i++)
             {
                 parts[i] = callee_list[i - 1].UserName;
             }
 
             string token = Guid.NewGuid().ToString();
-            foreach (Users callee in callee_list) 
+            var rooms = new List<WebRTCRoom>();
+            foreach (var callee in callee_list) 
             {
-                WebRTCRoom room = new WebRTCRoom()
+                var item = new WebRTCRoom
                 {
-                    ID = Guid.NewGuid().ToString(),
                     Token = token,
                     Name = "MM-Call-Room",
                     SharedWith = "public",
                     Status = "available",
                     LastUpdated = DateTime.Now,
-                    OwnerName = WebRTCLib.Utils.Helper.CurrentUser.User.UserName,
-                    OwnerToken = WebRTCLib.Utils.Helper.CurrentUser.User.Id,
+                    OwnerName = UserName,
+                    OwnerToken = UserId,
                     ParticipantName = callee.UserName,
                     ParticipantToken = callee.Id,
-                    CreateOn = DateTime.Now,
-                    CreateOnStr = DateTime.Now.ToString("yyyy-MM-dd"),
-                    Participants = String.Join(",", parts),
+                    Participants = string.Join(",", parts),
                 };
-                entities.WebRTCRoom.Add(room);
+
+                rooms.Add(item);
             }
-            entities.SaveChanges();
+
+            _roomRepository.AddMany(rooms);
+
             return Json(new { roomtoken = token }, JsonRequestBehavior.AllowGet);
         }
 
@@ -100,63 +107,44 @@ namespace WebRTC.Controllers
         [HttpPost]
         public JsonResult CallGroupOrTeam(string id, string type)
         {
-            List<Users> users = new List<Users>();
-            if (type == "group")
-            {
-                var entrys = from assignGroup in entities.UserAssignGroup
-                             join user in entities.Users on assignGroup.UserID equals user.Id
-                             where assignGroup.GroupID == id
-                             select new { UserName = user.UserName, Id = user.Id };
-                foreach (var entry in entrys)
-                    users.Add(new Users() { UserName = entry.UserName, Id = entry.Id });
-            }
-            else if (type == "team")
-            {
-                var entrys = from assignTeam in entities.UserAssignTeam
-                             join user in entities.Users on assignTeam.UserID equals user.Id
-                             where assignTeam.TeamID == id
-                             select new { UserName = user.UserName, Id = user.Id };
-                foreach (var entry in entrys)
-                    users.Add(new Users() { UserName = entry.UserName, Id = entry.Id });
-            }
+            var users = _userRepository.GetAssignUsers(type, id);
 
-            if (users.Count > 0)
+            if (users.Any())
             {
                 string[] parts = new string[users.Count + 1];
-                parts[0] = WebRTCLib.Utils.Helper.CurrentUser.User.UserName;
+                parts[0] = UserName;
                 for (int i = 1; i <= users.Count; i++)
                 {
                     parts[i] = users[i - 1].UserName;
                 }
 
                 string token = Guid.NewGuid().ToString();
-                foreach (Users callee in users)
+                var rooms = new List<WebRTCRoom>();
+                foreach (var callee in users)
                 {
-                    WebRTCRoom room = new WebRTCRoom()
+                    var item = new WebRTCRoom
                     {
-                        ID = Guid.NewGuid().ToString(),
                         Token = token,
                         Name = "Multi-Call-Room",
                         SharedWith = "public",
                         Status = "available",
                         LastUpdated = DateTime.Now,
-                        OwnerName = WebRTCLib.Utils.Helper.CurrentUser.User.UserName,
-                        OwnerToken = WebRTCLib.Utils.Helper.CurrentUser.User.Id,
+                        OwnerName = UserName,
+                        OwnerToken = UserId,
                         ParticipantName = callee.UserName,
                         ParticipantToken = callee.Id,
-                        CreateOn = DateTime.Now,
-                        CreateOnStr = DateTime.Now.ToString("yyyy-MM-dd"),
-                        Participants = String.Join(",", parts),
+                        Participants = string.Join(",", parts),
                     };
-                    entities.WebRTCRoom.Add(room);
+
+                    rooms.Add(item);
                 }
-                entities.SaveChanges();
+
+                _roomRepository.AddMany(rooms);
+
                 return Json(new { Successful = true, roomtoken = token }, JsonRequestBehavior.AllowGet);
             }
             else
-            {
                 return Json(new { Successful = false, Message = "Haven't found any user, Please invite user first." });
-            }
         }
 
         /// <summary>
@@ -166,18 +154,20 @@ namespace WebRTC.Controllers
         /// <returns></returns>
         public ActionResult Room(string id)
         {
-            WebRTCRoom room = entities.WebRTCRoom.FirstOrDefault(t => t.ID == id);
-            List<WebRTCRoom> rooms = new List<WebRTCRoom>();
+            var room = _roomRepository.GetSingle(id);
+            var rooms = new List<WebRTCRoom>();
             rooms.Add(room);
+
             ViewBag.Rooms = rooms;
-
             ViewBag.RoomToken = id;
+            ViewBag.Photo = UserManager.FindById(UserId).Photo;
 
-            if (room.ParticipantToken == WebRTCLib.Utils.Helper.CurrentUser.User.Id)
+            if (room.ParticipantToken == UserId)
             {
                 room.Status = "active";
-                entities.Entry(room).CurrentValues.SetValues(room);
-                entities.SaveChanges();
+                room.EntityState = EntityState.Modified;
+
+                _roomRepository.Save(room);
             }
 
             return View("~/Views/WebRTC/MultiCallRoom.cshtml");
@@ -190,23 +180,25 @@ namespace WebRTC.Controllers
         /// <returns></returns>
         public ActionResult MultiCallRoom(string id)
         {
-            WebRTCRoom room = entities.WebRTCRoom.FirstOrDefault(t => t.Token == id && t.ParticipantToken == WebRTCLib.Utils.Helper.CurrentUser.User.Id);
+            var room = _roomRepository.GetSingle(t => t.Token == id && t.ParticipantToken == UserId);
             ViewBag.RoomToken = id;
+            ViewBag.Photo = UserManager.FindById(UserId).Photo;
 
             if (room != null)
             {
-                List<WebRTCRoom> rooms = new List<WebRTCRoom>();
+                var rooms = new List<WebRTCRoom>();
                 rooms.Add(room);
                 ViewBag.Rooms = rooms;
 
                 room.Status = "active";
-                entities.Entry(room).CurrentValues.SetValues(room);
-                entities.SaveChanges();
+                room.EntityState = EntityState.Modified;
+                _roomRepository.Save(room);
+
                 return View("~/Views/WebRTC/MultiCallRoom.cshtml");
             }
             else
             {
-                List<WebRTCRoom> rooms = entities.WebRTCRoom.Where(t => t.Token == id).ToList<WebRTCRoom>();
+                var rooms = _roomRepository.GetSingle(x => x.Token == id);
                 ViewBag.Rooms = rooms;
                 return View();
             }
@@ -214,23 +206,25 @@ namespace WebRTC.Controllers
 
         public ActionResult MMCallRoom(string id)
         {
-            WebRTCRoom room = entities.WebRTCRoom.FirstOrDefault(t => t.Token == id && t.ParticipantToken == WebRTCLib.Utils.Helper.CurrentUser.User.Id);
+            var room = _roomRepository.GetSingle(t => t.Token == id && t.ParticipantToken == UserId);
             ViewBag.RoomToken = id;
+            ViewBag.Photo = UserManager.FindById(UserId).Photo;
 
             if (room != null)
             {
-                List<WebRTCRoom> rooms = new List<WebRTCRoom>();
+                var rooms = new List<WebRTCRoom>();
                 rooms.Add(room);
                 ViewBag.Rooms = rooms;
 
                 room.Status = "active";
-                entities.Entry(room).CurrentValues.SetValues(room);
-                entities.SaveChanges();
+                room.EntityState = EntityState.Modified;
+                _roomRepository.Save(room);
+
                 return View("~/Views/WebRTC/MultiCallRoom.cshtml");
             }
             else
             {
-                List<WebRTCRoom> rooms = entities.WebRTCRoom.Where(t => t.Token == id).ToList<WebRTCRoom>();
+                var rooms = _roomRepository.GetSingle(x => x.Token == id);
                 ViewBag.Rooms = rooms;
                 return View("~/Views/WebRTC/MultiCallRoom.cshtml");
             }
@@ -240,12 +234,12 @@ namespace WebRTC.Controllers
         public JsonResult GetParticipant()
         {
             string roomname = Request["roomname"];
-            WebRTCRoom room = entities.WebRTCRoom.FirstOrDefault(t => t.ID == roomname);
+            var room = _roomRepository.GetSingle(roomname);
             if (room.Status != "active")
                 return Json(false, JsonRequestBehavior.AllowGet);
             else
             {
-                Users userPart = entities.Users.FirstOrDefault(t => t.Id == room.ParticipantToken);
+                var userPart = UserManager.FindById(room.ParticipantToken);
                 return Json(new { participant = userPart.UserName, partPhoto = userPart.Photo }, JsonRequestBehavior.AllowGet);
             }
         }
@@ -260,17 +254,15 @@ namespace WebRTC.Controllers
         [HttpPost]
         public JsonResult PostSDP(string sdp, string roomToken, string userToken)
         {
-            WebRTCSDPMessage sdpmessage = new WebRTCSDPMessage() 
+            var sdpmessage = new WebRTCSDPMessage 
             {
-                ID = Guid.NewGuid().ToString(),
                 SDP = sdp,
                 IsProcessed = false,
                 RoomToken = roomToken,
-                Sender = userToken,
-                CreateOn = DateTime.Now,
+                Sender = userToken
             };
-            entities.WebRTCSDPMessage.Add(sdpmessage);
-            entities.SaveChanges();
+
+            _sdpMessageRepository.Save(sdpmessage);
 
             return Json(true, JsonRequestBehavior.AllowGet);
         }
@@ -281,15 +273,16 @@ namespace WebRTC.Controllers
             string roomToken = Request["roomToken"];
             string userToken = Request["userToken"];
 
-            WebRTCSDPMessage sdpMessage = entities.WebRTCSDPMessage.FirstOrDefault(t => t.RoomToken == roomToken && t.Sender != userToken && t.IsProcessed == false);
+            var sdpMessage = _sdpMessageRepository.GetSingle(t => t.RoomToken == roomToken && t.Sender != userToken && !t.IsProcessed);
+
             if (sdpMessage == null)
                 return Json(false, JsonRequestBehavior.AllowGet);
 
             sdpMessage.IsProcessed = true;
-            entities.Entry(sdpMessage).CurrentValues.SetValues(sdpMessage);
-            entities.SaveChanges();
+            sdpMessage.EntityState = EntityState.Modified;
+            _sdpMessageRepository.Save(sdpMessage);
 
-            Users user = entities.Users.FirstOrDefault(t => t.Id == sdpMessage.Sender);
+            var user = UserManager.FindById(sdpMessage.Sender);
 
             return Json(new { sdp = sdpMessage.SDP, partUserName = user.UserName, partPhoto = user.Photo }, JsonRequestBehavior.AllowGet);
         }
@@ -305,18 +298,16 @@ namespace WebRTC.Controllers
         [HttpPost]        
         public JsonResult PostICE(string candidate, string label, string roomToken, string userToken)
         {
-            WebRTCCandidatesTable cand = new WebRTCCandidatesTable()
+            var cand = new WebRTCCandidatesTable
             {
-                ID = Guid.NewGuid().ToString(),
                 Candidate = candidate,
                 Label = label,
                 RoomToken = roomToken,
                 Sender = userToken,
-                IsProcessed = false,
-                CreateOn = DateTime.Now,
+                IsProcessed = false
             };
-            entities.WebRTCCandidatesTable.Add(cand);
-            entities.SaveChanges();
+
+            _candidateRepository.Save(cand);
 
             return Json(true, JsonRequestBehavior.AllowGet);
         }
@@ -327,13 +318,14 @@ namespace WebRTC.Controllers
             string roomToken = Request["roomToken"];
             string userToken = Request["userToken"];
 
-            WebRTCCandidatesTable cand = entities.WebRTCCandidatesTable.FirstOrDefault(t => t.RoomToken == roomToken && t.Sender != userToken && t.IsProcessed == false);
+            var cand = _candidateRepository.GetSingle(t => t.RoomToken == roomToken && t.Sender != userToken && t.IsProcessed);
             if (cand == null)
                 return Json(false, JsonRequestBehavior.AllowGet);
 
             cand.IsProcessed = true;
-            entities.Entry(cand).CurrentValues.SetValues(cand);
-            entities.SaveChanges();
+            cand.EntityState = EntityState.Modified;
+
+            _candidateRepository.Save(cand);
 
             return Json(new { candidate = cand.Candidate, label = cand.Label }, JsonRequestBehavior.AllowGet);
         }
@@ -341,20 +333,17 @@ namespace WebRTC.Controllers
         [HttpPost]
         public JsonResult SaveMessage()
         {
-            ChatMessage chatMessage = new ChatMessage()
+            var message = new ChatMessage
             {
-                Id = Guid.NewGuid().ToString(),
-                UserID = WebRTCLib.Utils.Helper.CurrentUser.User.Id,
+                UserID = UserId,
                 RoomToken = Request["RoomToken"],
                 MessageSender = Request["MessageSender"],
                 MessageType = Request["MessageType"],
                 MessageContent = Request["MessageContent"],
-                Discriminator = "ChatMessage",
-                CreateOn = DateTime.Now,
-                CreateOnStr = DateTime.Now.ToString("yyyy-MM-dd"),
+                Discriminator = "ChatMessage"
             };
-            entities.ChatMessage.Add(chatMessage);
-            entities.SaveChanges();
+
+            _chatMessageRepsitory.Save(message);
 
             return Json(true, JsonRequestBehavior.AllowGet);
         }
@@ -362,10 +351,11 @@ namespace WebRTC.Controllers
         [HttpGet]
         public JsonResult Ignore(string id)
         {
-            WebRTCRoom room = entities.WebRTCRoom.FirstOrDefault(t => t.ID == id);
+            var room = _roomRepository.GetSingle(id);
             room.Status = "Ignore";
-            entities.Entry(room).CurrentValues.SetValues(room);
-            entities.SaveChanges();
+            room.EntityState = EntityState.Modified;
+
+            _roomRepository.Save(room);
 
             return Json(true, JsonRequestBehavior.AllowGet);
         }
@@ -394,6 +384,5 @@ namespace WebRTC.Controllers
 
             return Json(new { Data = data }, JsonRequestBehavior.AllowGet);
         }
-
     }
 }
