@@ -1,28 +1,49 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Security.Claims;
-using System.Threading.Tasks;
 using System.Web;
 using System.Web.Mvc;
-using Microsoft.AspNet.Identity;
-using Microsoft.AspNet.Identity.EntityFramework;
-using Microsoft.Owin.Security;
+using WebRTC.Data.Abstracts;
+using WebRTC.Infrastructure.Helpers;
+using WebRTC.Core.Entities;
+using System.IO;
+using System.Drawing;
+using System.Data.Entity;
 using WebRTC.Models;
-using WebRTCLib;
-using WebRTC.Filters;
-
+using AutoMapper;
 
 namespace WebRTC.Controllers
 {
-    [LoginRequired]
-    public class FileLibraryController : Controller
+    [Authorize]
+    public class FileLibraryController : BaseController
     {
-        Entities entities = null;
+        private readonly IFileRepository _fileRepository;
+        private readonly IGTFileRepository _gtFileRepository;
+        private readonly IGroupRepository _groupRepository;
+        private readonly ITeamRepository _teamRepository;
+        private readonly IFolderRepository _folderRepository;
+        private readonly IGTFolderRepository _gtFolderRepository;
+        private readonly ICommonHelper _commonHelper;
+        private readonly IMapper _mapper;
 
-        public FileLibraryController()
+        public FileLibraryController(
+            IFileRepository fileRepository,
+            IGTFileRepository gtFileRepository,
+            IGroupRepository groupRepository,
+            ITeamRepository teamRepository,
+            IFolderRepository folderRepository,
+            IGTFolderRepository gtFolderRepository,
+            ICommonHelper commonHelper,
+            IMapper mapper)
         {
-            this.entities = new Entities();
+            _fileRepository = fileRepository;
+            _gtFileRepository = gtFileRepository;
+            _groupRepository = groupRepository;
+            _teamRepository = teamRepository;
+            _folderRepository = folderRepository;
+            _gtFolderRepository = gtFolderRepository;
+            _commonHelper = commonHelper;
+            _mapper = mapper;
         }
 
         /// <summary>
@@ -40,7 +61,7 @@ namespace WebRTC.Controllers
 
         public ActionResult Group(string id)
         {
-            Groups group = entities.Groups.FirstOrDefault(t => t.Id == id);
+            var group = _groupRepository.GetSingle(id);
 
             ViewBag.Id = id;
             ViewBag.GTType = "Group";
@@ -51,7 +72,7 @@ namespace WebRTC.Controllers
 
         public ActionResult Team(string id)
         {
-            Teams team = entities.Teams.FirstOrDefault(t => t.Id == id);
+            var team = _teamRepository.GetSingle(id);
 
             ViewBag.Id = id;
             ViewBag.GTType = "Team";
@@ -65,36 +86,28 @@ namespace WebRTC.Controllers
         {
             if (GTType == "File")
             {
-                WebRTCLib.Folders folder = new Folders()
+                var folder = new Folder
                 {
-                    Id = Guid.NewGuid().ToString(),
-                    UserID = WebRTCLib.Utils.Helper.CurrentUser.User.Id,
+                    UserID = UserId,
                     Name = Name,
-                    ParentID = ParentID,
-                    Discriminator = "Folders",
-                    CreateOn = DateTime.Now,
-                    CreateOnStr = DateTime.Now.ToString("yyyy-MM-dd HH:mm"),
+                    ParentID = ParentID
                 };
-                entities.Folders.Add(folder);
-                entities.SaveChanges();
+
+                _folderRepository.Save(folder);
             }
             else
             {
-                GTFolders folder = new GTFolders()
+                var folder = new GTFolder
                 {
-                    Id = Guid.NewGuid().ToString(),
-                    UserID = WebRTCLib.Utils.Helper.CurrentUser.User.Id,
-                    UserName = WebRTCLib.Utils.Helper.CurrentUser.User.UserName,
+                    UserID = UserId,
+                    UserName = UserName,
                     GTID = Id,
                     GTType = GTType,
                     Name = Name,
-                    ParentID = ParentID,
-                    Discriminator = "Folders",
-                    CreateOn = DateTime.Now,
-                    CreateOnStr = DateTime.Now.ToString("yyyy-MM-dd HH:mm"),
+                    ParentID = ParentID
                 };
-                entities.GTFolders.Add(folder);
-                entities.SaveChanges();
+
+                _gtFolderRepository.Save(folder);
             }
 
             return Json(true, JsonRequestBehavior.AllowGet);
@@ -110,20 +123,20 @@ namespace WebRTC.Controllers
 
             if (GTType == "File")
             {
-                List<Folders> folders = entities.Folders.Where(t => t.UserID == WebRTCLib.Utils.Helper.CurrentUser.User.Id && t.ParentID == folderID).ToList<Folders>();
-                List<Files> files = entities.Files.Where(t => t.UserID == WebRTCLib.Utils.Helper.CurrentUser.User.Id && t.FolderID == folderID).ToList<Files>();
+                var folders = _folderRepository.FindBy(x => x.UserID == UserId && x.ParentID == folderID).ToList();
+                var files = _fileRepository.FindBy(x => x.UserID == UserId && x.FolderID == folderID).ToList();
 
-                List<Folders> navFolders = new List<Folders>();
+                var navFolders = new List<Folder>();
                 for (int i = 0; i < 10; i++)
                 {
                     if (folderID == "")
                     {
-                        navFolders.Add(new Folders() { Name = "All Files", Id = "", Discriminator = "" });
+                        navFolders.Add(new Folder { Name = "All Files", Id = "", Discriminator = "" });
                         break;
                     }
                     else
                     {
-                        Folders folder = entities.Folders.FirstOrDefault(t => t.Id == folderID);
+                        var folder = _folderRepository.GetSingle(folderID);
                         navFolders.Add(folder);
 
                         folderID = folder.ParentID;
@@ -135,20 +148,20 @@ namespace WebRTC.Controllers
             }
             else
             {
-                List<GTFolders> folders = entities.GTFolders.Where(t => t.ParentID == folderID && t.GTID == Id).ToList<GTFolders>();
-                List<GTFiles> files = entities.GTFiles.Where(t => t.GTID == Id && t.GTType == GTType && t.FolderID == folderID).ToList<GTFiles>();
+                var folders = _gtFolderRepository.FindBy(x => x.ParentID == folderID && x.GTID == Id).ToList();
+                var files = _gtFileRepository.FindBy(x => x.GTID == Id && x.GTType == GTType && x.FolderID == folderID).ToList();
 
-                List<GTFolders> navFolders = new List<GTFolders>();
+                var navFolders = new List<GTFolder>();
                 for (int i = 0; i < 10; i++)
                 {
                     if (folderID == "")
                     {
-                        navFolders.Add(new GTFolders() { Name = "All Files", Id = "", Discriminator = "" });
+                        navFolders.Add(new GTFolder { Name = "All Files", Id = "", Discriminator = "" });
                         break;
                     }
                     else
                     {
-                        GTFolders folder = entities.GTFolders.FirstOrDefault(t => t.Id == folderID);
+                        var folder = _gtFolderRepository.GetSingle(folderID);
                         navFolders.Add(folder);
 
                         folderID = folder.ParentID;
@@ -163,7 +176,7 @@ namespace WebRTC.Controllers
         [HttpGet]
         public ActionResult GetGT(string Id, string GTType)
         {
-            List<GTFiles> files = entities.GTFiles.Where(t => t.GTID == Id && t.GTType == GTType).ToList<GTFiles>();
+            var files = _gtFileRepository.FindBy(x => x.GTID == Id && x.GTType == GTType).ToList();
             return Json(new { Files = files }, JsonRequestBehavior.AllowGet);
         }
 
@@ -179,15 +192,14 @@ namespace WebRTC.Controllers
             return Json(new { Successful = true, FileName = filename, SaveFileName = finalName }, JsonRequestBehavior.AllowGet);
         }
 
-        public System.Drawing.Image Base64ToImage(string cameraImage)
+        public Image Base64ToImage(string cameraImage)
         {
             byte[] imageBytes = Convert.FromBase64String(cameraImage);
-            System.IO.MemoryStream ms = new System.IO.MemoryStream(imageBytes, 0, imageBytes.Length);
+            MemoryStream ms = new MemoryStream(imageBytes, 0, imageBytes.Length);
             ms.Write(imageBytes, 0, imageBytes.Length);
-            System.Drawing.Image image = System.Drawing.Image.FromStream(ms, true);
+            Image image = Image.FromStream(ms, true);
             return image;
         }
-
 
         [HttpPost]
         public JsonResult UploadFile()
@@ -195,7 +207,7 @@ namespace WebRTC.Controllers
             HttpPostedFileBase file = Request.Files["file"];
             if (file != null)
             {
-                string filename = Guid.NewGuid().ToString() + System.IO.Path.GetFileName(file.FileName);
+                string filename = Guid.NewGuid().ToString() + Path.GetFileName(file.FileName);
                 filename = filename.Replace(" ", "");
 
                 string filetype = "Other";
@@ -208,9 +220,9 @@ namespace WebRTC.Controllers
                 //Check file size
                 if (filetype == "Image" && file.ContentLength >= 250 * 1024)
                 {
-                    string fp = System.IO.Path.Combine(HttpContext.Server.MapPath("~/Content/UploatAttachment"), filename);
+                    string fp = Path.Combine(HttpContext.Server.MapPath("~/Content/UploatAttachment"), filename);
                     file.SaveAs(fp);
-                    string saveFilename = WebRTCLib.Utils.Helper.ResizeImage(fp, HttpContext.Server.MapPath("~/Content/UploatAttachment"), filename, 0);
+                    string saveFilename = _commonHelper.ResizeImage(fp, HttpContext.Server.MapPath("~/Content/UploatAttachment"), filename, 0);
 
                     return Json(new { Successful = true, FileName = file.FileName, SaveFileName = saveFilename }, JsonRequestBehavior.AllowGet);
                 }
@@ -220,7 +232,7 @@ namespace WebRTC.Controllers
                 }
 
 
-                string filepath = System.IO.Path.Combine(HttpContext.Server.MapPath("~/Content/UploatAttachment"), filename);
+                string filepath = Path.Combine(HttpContext.Server.MapPath("~/Content/UploatAttachment"), filename);
                 file.SaveAs(filepath);
 
                 return Json(new { Successful = true, FileName = file.FileName, SaveFileName = filename }, JsonRequestBehavior.AllowGet);
@@ -241,47 +253,42 @@ namespace WebRTC.Controllers
             else if (lowerFileName.EndsWith(".pdf"))
                 filetype = "PDF";
 
-            string filepath = System.IO.Path.Combine(HttpContext.Server.MapPath("~/Content/UploatAttachment"), SaveFileName);
-            System.IO.FileInfo fileInfo = new System.IO.FileInfo(filepath);
-            string fileSize = WebRTCLib.Utils.Helper.FormatBytes(fileInfo.Length);
+            string filepath = Path.Combine(HttpContext.Server.MapPath("~/Content/UploatAttachment"), SaveFileName);
+            FileInfo fileInfo = new FileInfo(filepath);
+            string fileSize = _commonHelper.FormatBytes(fileInfo.Length);
 
             int width = 0, height = 0;
             if (filetype == "Image")
             {
-                System.Drawing.Image img = System.Drawing.Image.FromFile(filepath);
+                Image img = Image.FromFile(filepath);
                 width = img.Width;
                 height = img.Height;
             }
 
             if (GTType == "File")
             {
-                Files file = new Files()
+                var file = new Core.Entities.File
                 {
-                    Id = Guid.NewGuid().ToString(),
-                    UserID = WebRTCLib.Utils.Helper.CurrentUser.User.Id,
+                    UserID = UserId,
                     FileName = FileName,
                     SaveFileName = SaveFileName,
                     FolderID = FolderID,
                     FileType = filetype,
                     FileSize = fileSize,
-                    Discriminator = "Files",
-                    CreateOn = DateTime.Now,
-                    CreateOnStr = DateTime.Now.ToString("yyyy-MM-dd HH:mm"),
                     Width = width,
                     Height = height,
                 };
-                entities.Files.Add(file);
-                entities.SaveChanges();
+
+                _fileRepository.Save(file);
 
                 return Json(file, JsonRequestBehavior.AllowGet);
             }
             else
             {
-                GTFiles file = new GTFiles()
+                var file = new GTFile
                 {
-                    Id = Guid.NewGuid().ToString(),
-                    UserID = WebRTCLib.Utils.Helper.CurrentUser.User.Id,
-                    UserName = WebRTCLib.Utils.Helper.CurrentUser.User.UserName,
+                    UserID = UserId,
+                    UserName = UserName,
                     GTID = Id,
                     GTType = GTType,
                     FolderID = FolderID,
@@ -289,14 +296,11 @@ namespace WebRTC.Controllers
                     SaveFileName = SaveFileName,
                     FileType = filetype,
                     FileSize = fileSize,
-                    Discriminator = "GTFiles",
-                    CreateOn = DateTime.Now,
-                    CreateOnStr = DateTime.Now.ToString("yyyy-MM-dd HH:mm"),
                     Width = width,
                     Height = height,
                 };
-                entities.GTFiles.Add(file);
-                entities.SaveChanges();
+
+                _gtFileRepository.Save(file);
 
                 return Json(file, JsonRequestBehavior.AllowGet);
             }
@@ -312,27 +316,23 @@ namespace WebRTC.Controllers
             else if (lowerFileName.EndsWith(".pdf"))
                 filetype = "PDF";
 
-            string filepath = System.IO.Path.Combine(HttpContext.Server.MapPath("~/Content/UploatAttachment"), SaveFileName);
-            System.IO.FileInfo fileInfo = new System.IO.FileInfo(filepath);
-            string fileSize = WebRTCLib.Utils.Helper.FormatBytes(fileInfo.Length);
+            string filepath = Path.Combine(HttpContext.Server.MapPath("~/Content/UploatAttachment"), SaveFileName);
+            FileInfo fileInfo = new FileInfo(filepath);
+            string fileSize = _commonHelper.FormatBytes(fileInfo.Length);
 
-            GTFiles file = new GTFiles()
+            var file = new GTFile
             {
-                Id = Guid.NewGuid().ToString(),
-                UserID = WebRTCLib.Utils.Helper.CurrentUser.User.Id,
-                UserName = WebRTCLib.Utils.Helper.CurrentUser.User.UserName,
+                UserID = UserId,
+                UserName = UserName,
                 GTID = Id,
                 GTType = GTType,
                 FileName = FileName,
                 SaveFileName = SaveFileName,
                 FileType = filetype,
-                FileSize = fileSize,
-                Discriminator = "GTFiles",
-                CreateOn = DateTime.Now,
-                CreateOnStr = DateTime.Now.ToString("yyyy-MM-dd HH:mm"),
+                FileSize = fileSize
             };
-            entities.GTFiles.Add(file);
-            entities.SaveChanges();
+
+            _gtFileRepository.Save(file);
 
             return Json(file, JsonRequestBehavior.AllowGet);
         }
@@ -342,15 +342,15 @@ namespace WebRTC.Controllers
         {
             if (type == "Folder")
             {
-                Folders folder = entities.Folders.FirstOrDefault(t => t.Id == id);
-                entities.Folders.Remove(folder);
-                entities.SaveChanges();
+                var folder = _folderRepository.GetSingle(id);
+                folder.EntityState = EntityState.Deleted;
+                _folderRepository.Save(folder);
             }
             else if (type == "File")
             {
-                Files file = entities.Files.FirstOrDefault(t => t.Id == id);
-                entities.Files.Remove(file);
-                entities.SaveChanges();
+                var file = _fileRepository.GetSingle(id);
+                file.EntityState = EntityState.Deleted;
+                _fileRepository.Save(file);
             }
 
             return Json(true, JsonRequestBehavior.AllowGet);
@@ -359,9 +359,9 @@ namespace WebRTC.Controllers
         [HttpPost]
         public ActionResult DeleteGT(string id)
         {
-            GTFiles file = entities.GTFiles.FirstOrDefault(t => t.Id == id);
-            entities.GTFiles.Remove(file);
-            entities.SaveChanges();
+            var file = _gtFileRepository.GetSingle(id);
+            file.EntityState = EntityState.Deleted;
+            _gtFileRepository.Save(file);
 
             return Json(true, JsonRequestBehavior.AllowGet);
         }
@@ -373,34 +373,34 @@ namespace WebRTC.Controllers
             {
                 if (type == "Folder")
                 {
-                    Folders folder = entities.Folders.FirstOrDefault(t => t.Id == fid);
+                    var folder = _folderRepository.GetSingle(fid);
                     folder.Name = newName;
-                    entities.Entry(folder).CurrentValues.SetValues(folder);
-                    entities.SaveChanges();
+                    folder.EntityState = EntityState.Modified;
+                    _folderRepository.Save(folder);
                 }
                 else if (type == "File")
                 {
-                    Files file = entities.Files.FirstOrDefault(t => t.Id == fid);
+                    var file = _fileRepository.GetSingle(fid);
                     file.FileName = newName;
-                    entities.Entry(file).CurrentValues.SetValues(file);
-                    entities.SaveChanges();
+                    file.EntityState = EntityState.Modified;
+                    _fileRepository.Save(file);
                 }
             }
             else
             {
                 if (type == "Folder")
                 {
-                    GTFolders folder = entities.GTFolders.FirstOrDefault(t => t.Id == fid);
+                    var folder = _gtFolderRepository.GetSingle(fid);
                     folder.Name = newName;
-                    entities.Entry(folder).CurrentValues.SetValues(folder);
-                    entities.SaveChanges();
+                    folder.EntityState = EntityState.Modified;
+                    _gtFolderRepository.Save(folder);
                 }
                 else if (type == "File")
                 {
-                    GTFiles file = entities.GTFiles.FirstOrDefault(t => t.Id == fid);
+                    var file = _gtFileRepository.GetSingle(fid);
                     file.FileName = newName;
-                    entities.Entry(file).CurrentValues.SetValues(file);
-                    entities.SaveChanges();
+                    file.EntityState = EntityState.Modified;
+                    _gtFileRepository.Save(file);
                 }
             }
 
@@ -411,10 +411,10 @@ namespace WebRTC.Controllers
         public ActionResult RenameGT(string oldName, string newName, string type, string id)
         {
 
-            GTFiles file = entities.GTFiles.FirstOrDefault(t => t.Id == id);
+            var file = _gtFileRepository.GetSingle(id);
             file.FileName = newName;
-            entities.Entry(file).CurrentValues.SetValues(file);
-            entities.SaveChanges();
+            file.EntityState = EntityState.Modified;
+            _gtFileRepository.Save(file);
 
             return Json(true, JsonRequestBehavior.AllowGet);
         }
@@ -423,40 +423,38 @@ namespace WebRTC.Controllers
         public ActionResult ChooseFileGT(string Id, string GTType, string ids)
         {
             string[] idList = ids.Split(new string[] { "," }, StringSplitOptions.RemoveEmptyEntries);
-            List<Files> files = entities.Files.Where(t => idList.Contains(t.Id)).ToList<Files>();
+            var files = _fileRepository.FindBy(x => idList.Contains(x.Id)).ToList();
 
             int exists = 0;
             int added = 0;
 
+            var gtFiles = new List<GTFile>();
             foreach (var file in files)
             {
-                GTFiles gt = entities.GTFiles.FirstOrDefault(t => t.SaveFileName == file.SaveFileName && t.GTID == Id);
+                var gt = _gtFileRepository.GetSingle(x => x.SaveFileName == file.SaveFileName && x.GTID == Id);
                 if (gt != null)
                 { 
                     exists++;
                     continue;
                 }
 
-                GTFiles gtfile = new GTFiles()
+                var gtfile = new GTFile
                 {
-                    Id = Guid.NewGuid().ToString(),
-                    UserID = WebRTCLib.Utils.Helper.CurrentUser.User.Id,
-                    UserName = WebRTCLib.Utils.Helper.CurrentUser.User.UserName,
+                    UserID = UserId,
+                    UserName = UserName,
                     GTID = Id,
                     GTType = GTType,
                     FileName = file.FileName,
                     SaveFileName = file.SaveFileName,
                     FileType = file.FileType,
-                    FileSize = file.FileSize,
-                    Discriminator = "GTFiles",
-                    CreateOn = DateTime.Now,
-                    CreateOnStr = DateTime.Now.ToString("yyyy-MM-dd HH:mm"),
+                    FileSize = file.FileSize
                 };
-                entities.GTFiles.Add(gtfile);
-                entities.SaveChanges();
 
+                gtFiles.Add(gtfile);
                 added++;
             }
+
+            _gtFileRepository.AddMany(gtFiles);
 
             return Json(new { exists = exists, added = added }, JsonRequestBehavior.AllowGet);
         }
@@ -468,59 +466,59 @@ namespace WebRTC.Controllers
             string[] tidsList = tids.Split(new string[] { "," }, StringSplitOptions.RemoveEmptyEntries);
             string[] cidsList = cids.Split(new string[] { "," }, StringSplitOptions.RemoveEmptyEntries);
 
-            if (GTType == "File")
-            {
-                if (type == "File")
-                {
-                    Files file = entities.Files.FirstOrDefault(t => t.Id == fid);
-                    foreach (string gid in gidsList)
-                    {
-                        GTFiles gfile = new GTFiles(Guid.NewGuid().ToString(), WebRTCLib.Utils.Helper.CurrentUser.User.Id, WebRTCLib.Utils.Helper.CurrentUser.User.UserName, "", gid, "Group", file.FileName, file.SaveFileName, file.FileType, file.FileSize, "GTFiles", DateTime.Now, DateTime.Now.ToString("yyyy-MM-dd HH:mm"));
-                        entities.GTFiles.Add(gfile);
-                    }
-                    foreach (string tid in tidsList)
-                    {
-                        GTFiles tfile = new GTFiles(Guid.NewGuid().ToString(), WebRTCLib.Utils.Helper.CurrentUser.User.Id, WebRTCLib.Utils.Helper.CurrentUser.User.UserName, "", tid, "Team", file.FileName, file.SaveFileName, file.FileType, file.FileSize, "GTFiles", DateTime.Now, DateTime.Now.ToString("yyyy-MM-dd HH:mm"));
-                        entities.GTFiles.Add(tfile);
-                    }
-                    foreach (string cid in cidsList)
-                    {
-                        Files cfile = new Files(Guid.NewGuid().ToString(), cid, "", file.FileName, file.SaveFileName, file.FileType, file.FileSize, "Files", DateTime.Now, DateTime.Now.ToString("yyyy-MM-dd HH:mm"));
-                        entities.Files.Add(cfile);
-                    }
-                }
-                else if (type == "Folder")
-                {
+            var file = new FileCommonViewModel();
+            if (GTType == "File" && type == "File")
+                file = _mapper.Map<Core.Entities.File, FileCommonViewModel>(_fileRepository.GetSingle(fid));
+            else if(GTType != "File" &&  type == "File")
+                file = _mapper.Map<GTFile, FileCommonViewModel>(_gtFileRepository.GetSingle(fid));
 
-                }
-            }
-            else
+            var gtFiles = new List<GTFile>();
+            var files = new List<Core.Entities.File>();
+            foreach (string gid in gidsList)
             {
-                if (type == "File")
+                var item = new GTFile
                 {
-                    GTFiles file = entities.GTFiles.FirstOrDefault(t => t.Id == fid);
-                    foreach (string gid in gidsList)
-                    {
-                        GTFiles gfile = new GTFiles(Guid.NewGuid().ToString(), WebRTCLib.Utils.Helper.CurrentUser.User.Id, WebRTCLib.Utils.Helper.CurrentUser.User.UserName, "", gid, "Group", file.FileName, file.SaveFileName, file.FileType, file.FileSize, "GTFiles", DateTime.Now, DateTime.Now.ToString("yyyy-MM-dd HH:mm"));
-                        entities.GTFiles.Add(gfile);
-                    }
-                    foreach (string tid in tidsList)
-                    {
-                        GTFiles tfile = new GTFiles(Guid.NewGuid().ToString(), WebRTCLib.Utils.Helper.CurrentUser.User.Id, WebRTCLib.Utils.Helper.CurrentUser.User.UserName, "", tid, "Team", file.FileName, file.SaveFileName, file.FileType, file.FileSize, "GTFiles", DateTime.Now, DateTime.Now.ToString("yyyy-MM-dd HH:mm"));
-                        entities.GTFiles.Add(tfile);
-                    }
-                    foreach (string cid in cidsList)
-                    {
-                        Files cfile = new Files(Guid.NewGuid().ToString(), cid, "", file.FileName, file.SaveFileName, file.FileType, file.FileSize, "Files", DateTime.Now, DateTime.Now.ToString("yyyy-MM-dd HH:mm"));
-                        entities.Files.Add(cfile);
-                    }
-                }
-                else if (type == "Folder")
-                {
-
-                }
+                    UserID = UserId,
+                    UserName = UserName,
+                    GTID = gid,
+                    GTType = "Group",
+                    FileName = file.FileName,
+                    SaveFileName = file.SaveFileName,
+                    FileType = file.FileType,
+                    FileSize = file.FileSize
+                };
+                gtFiles.Add(item);
             }
-            entities.SaveChanges();
+            foreach (string tid in tidsList)
+            {
+                var item = new GTFile
+                {
+                    UserID = UserId,
+                    UserName = UserName,
+                    GTID = tid,
+                    GTType = "Team",
+                    FileName = file.FileName,
+                    SaveFileName = file.SaveFileName,
+                    FileType = file.FileType,
+                    FileSize = file.FileSize
+                };
+                gtFiles.Add(item);
+            }
+            foreach (string cid in cidsList)
+            {
+                var item = new Core.Entities.File
+                {
+                    UserID = cid,
+                    FileName = file.FileName,
+                    SaveFileName = file.SaveFileName,
+                    FileType = file.FileType,
+                    FileSize = file.FileSize
+                };
+                files.Add(item);
+            }
+
+            _fileRepository.AddMany(files);
+            _gtFileRepository.AddMany(gtFiles);
 
             return Json(true, JsonRequestBehavior.AllowGet);
         }
@@ -528,15 +526,14 @@ namespace WebRTC.Controllers
         [HttpPost]
         public JsonResult SetImageSize(string fileid)
         {
-            Files file = entities.Files.FirstOrDefault(t => t.Id == fileid);
-            string filepath = System.IO.Path.Combine(HttpContext.Server.MapPath("~/Content/UploatAttachment"), file.SaveFileName);
-            System.Drawing.Image img = System.Drawing.Image.FromFile(filepath);
+            var file = _fileRepository.GetSingle(fileid);
+            string filepath = Path.Combine(HttpContext.Server.MapPath("~/Content/UploatAttachment"), file.SaveFileName);
+            Image img = Image.FromFile(filepath);
 
             file.Width = img.Width;
             file.Height = img.Height;
-
-            entities.Entry(file).CurrentValues.SetValues(file);
-            entities.SaveChanges();
+            file.EntityState = EntityState.Modified;
+            _fileRepository.Save(file);
 
             return Json(file, JsonRequestBehavior.AllowGet);
         }
