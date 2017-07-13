@@ -1,3 +1,5 @@
+@using Microsoft.AspNet.Identity;
+
 @{
     Layout = "~/Views/Shared/_UserLayout.cshtml";
     string Id = ViewBag.Id;
@@ -13,7 +15,7 @@
     ViewBag.Title = title;
     ViewBag.Header = title;
 
-    string userid = WebRTCLib.Utils.Helper.CurrentUser.User.Id;
+    string userid = User.Identity.GetUserId();
 }
 
 <input type="hidden" id="hiddenId" value="@Id" />
@@ -36,7 +38,7 @@
     </div>
     <div style="margin-top:5px;margin-bottom:5px;">
         <span ng-repeat="folder in navFolders">
-            <a href="javascript:void(0);" ng-click="chooseFolder(folder);">{{folder.Name}}</a>
+            <a href="javascript:void(0);" ng-click="chooseFolder(folder);" ng-cloak>{{folder.Name}}</a>
             <span ng-if="folder.Discriminator!='LastOne'">&gt;</span>
         </span>
     </div>
@@ -60,13 +62,13 @@
                 </td>
                 <td>
                     <span class="glyphicon glyphicon-folder-open" style="color:rgba(228, 170, 0, 0.99);"></span>
-                    <a href="javascript:void(0);" style="margin-left:5px;" ng-click="chooseFolder(folder);">{{folder.Name}}</a>
+                    <a href="javascript:void(0);" style="margin-left:5px;" ng-click="chooseFolder(folder);" ng-cloak>{{folder.Name}}</a>
                 </td>
                 <td ng-if="GTType!='File'">
-                    <span style="font-weight:bold;">{{folder.UserName}}</span>
+                    <span style="font-weight:bold;" ng-cloak>{{folder.UserName}}</span>
                 </td>
                 <td>-</td>
-                <td>{{folder.CreateOnStr}}</td>
+                <td ng-cloak>{{folder.CreateOnStr}}</td>
                 <td style="text-align:center;">
                     <button type="button" class="btn btn-success btn-sm" title="Rename this folder" style="" ng-if="folder.UserID=='@userid'" ng-click="openRename('Folder',folder.Name,folder.Id);">
                         <span class="glyphicon glyphicon-edit"></span>
@@ -85,14 +87,14 @@
                     <span ng-if="file.FileType=='PDF'" class="fa fa-file-pdf-o fa-fw" style="color:#E21010;"></span>    
                     <span ng-if="file.FileType=='Image'" class="fa fa-file-picture-o fa-fw" style="color:#E21010;"></span> 
                     <span ng-if="file.FileType=='Other'" class="fa fa-file fa-fw" style="color:#E21010;"></span>       
-                    @*<a ng-href="/Content/UploatAttachment/{{file.SaveFileName}}" target="_blank">{{file.FileName}}</a>*@
-                    <a href="javascript:void(0);" ng-click="openIframeFile(file.SaveFileName);">{{file.FileName}}</a>
+                    @*<a ng-href="/Content/UploatAttachment/{{file.SaveFileName}}" target="_blank" ng-cloak>{{file.FileName}}</a>*@
+                    <a href="javascript:void(0);" ng-click="openIframeFile(file.SaveFileName);" ng-cloak>{{file.FileName}}</a>
                 </td>
                 <td ng-if="GTType!='File'">
-                    <span style="font-weight:bold;">{{file.UserName}}</span>
+                    <span style="font-weight:bold;" ng-cloak>{{file.UserName}}</span>
                 </td>
-                <td>{{file.FileSize}}</td>
-                <td>{{file.CreateOnStr}}</td>
+                <td ng-cloak>{{file.FileSize}}</td>
+                <td ng-cloak>{{file.CreateOnStr}}</td>
                 <td style="text-align:center;">
                     <button type="button" class="btn btn-success btn-sm" title="Rename this file" style="" ng-click="openRename('File',file.FileName,file.Id);" ng-if="file.UserID=='@userid'">
                         <span class="glyphicon glyphicon-edit"></span>
@@ -111,7 +113,7 @@
             <div>
                 <img src="~/Content/Images/fileview-folder.png" ng-click="chooseFolder(folder);"/>
             </div>
-            <a href="javascript:void(0);" style="margin-left:5px;" ng-click="chooseFolder(folder);">{{folder.Name}}</a>
+            <a href="javascript:void(0);" style="margin-left:5px;" ng-click="chooseFolder(folder);" ng-cloak>{{folder.Name}}</a>
         </div>
         <div ng-repeat="file in files" context-menu="menuOptionsFile" style="float:left;width:150px;cursor:pointer;text-align:center;">
             <div>             
@@ -119,8 +121,8 @@
                 <img ng-if="file.FileType=='Image'" ng-src="/Content/UploatAttachment/{{file.SaveFileName}}" style="height:110px;"/>
                 <img ng-if="file.FileType=='Other'" src="~/Content/Images/fileview-other.png"/>
             </div>
-            @*<a ng-href="/Content/UploatAttachment/{{file.SaveFileName}}" target="_blank">{{file.FileName}}</a>*@
-            <a href="javascript:void(0);" ng-click="openIframeFile(file.SaveFileName);">{{file.FileName}}</a>
+            @*<a ng-href="/Content/UploatAttachment/{{file.SaveFileName}}" target="_blank" ng-cloak>{{file.FileName}}</a>*@
+            <a href="javascript:void(0);" ng-click="openIframeFile(file.SaveFileName);" ng-cloak>{{file.FileName}}</a>
         </div>
     </div>
 
@@ -197,7 +199,7 @@
                     <h4 class="modal-title" id="modalDeleteFolderOrFileLabel">Delete {{deleteEntry.type}}</h4>
                 </div>
                 <div class="modal-body">
-                    <h4>Are you sure delete {{deleteEntry.type}}: <span style="color:red;">{{deleteEntry.name}}</span> ?</h4>
+                    <h4>Are you sure delete {{deleteEntry.type}}: <span style="color:red;" ng-cloak>{{deleteEntry.name}}</span> ?</h4>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>
@@ -246,7 +248,7 @@
                 <div class="modal-body">
                     <div style="margin-top:5px;margin-bottom:5px;">
                         <span ng-repeat="folder in navFolders2">
-                            <a href="javascript:void(0);" ng-click="chooseFolder2(folder);">{{folder.Name}}</a>
+                            <a href="javascript:void(0);" ng-click="chooseFolder2(folder);" ng-cloak>{{folder.Name}}</a>
                             <span ng-if="folder.Discriminator!='LastOne'">&gt;</span>
                         </span>
                     </div>
@@ -266,10 +268,10 @@
                                 <td></td>
                                 <td>
                                     <span class="glyphicon glyphicon-folder-open" style="color:rgba(228, 170, 0, 0.99);"></span>
-                                    <a href="javascript:void(0);" style="margin-left:5px;" ng-click="chooseFolder2(folder);">{{folder.Name}}</a>
+                                    <a href="javascript:void(0);" style="margin-left:5px;" ng-click="chooseFolder2(folder);" ng-cloak>{{folder.Name}}</a>
                                 </td>
                                 <td>-</td>
-                                <td>{{folder.CreateOnStr}}</td>
+                                <td ng-cloak>{{folder.CreateOnStr}}</td>
                             </tr>
                             <tr ng-repeat="file in files2">
                                 <td>
@@ -279,10 +281,10 @@
                                     <span ng-if="file.FileType=='PDF'" class="fa fa-file-pdf-o fa-fw" style="color:#E21010;"></span>
                                     <span ng-if="file.FileType=='Image'" class="fa fa-file-picture-o fa-fw" style="color:#E21010;"></span>
                                     <span ng-if="file.FileType=='Other'" class="fa fa-file fa-fw" style="color:#E21010;"></span>
-                                    <a ng-href="/Content/UploatAttachment/{{file.SaveFileName}}" target="_blank">{{file.FileName}}</a>
+                                    <a ng-href="/Content/UploatAttachment/{{file.SaveFileName}}" target="_blank" ng-cloak>{{file.FileName}}</a>
                                 </td>
-                                <td>{{file.FileSize}}</td>
-                                <td>{{file.CreateOnStr}}</td>
+                                <td ng-cloak>{{file.FileSize}}</td>
+                                <td ng-cloak>{{file.CreateOnStr}}</td>
                             </tr>
                         </tbody>
                     </table>
@@ -325,8 +327,8 @@
                                         <td>
                                             <input type="checkbox" ng-model="contact.Checked" />
                                         </td>
-                                        <td>{{contact.ContactUserName}}</td>
-                                        <td>{{contact.ContactFullName}}</td>
+                                        <td ng-cloak>{{contact.ContactUserName}}</td>
+                                        <td ng-cloak>{{contact.ContactFullName}}</td>
                                     </tr>
                                 </tbody>
                             </table>                         
@@ -334,13 +336,13 @@
                         <div class="tab-pane fade" id="tabGroupAndTeam">      
                             <div class="col-md-12" ng-repeat="group in groups">
                                 <div class="col-md-12" style="margin-bottom:10px;">
-                                    <span style="font-weight:bold;font-size:18px;">{{group.Index}}:&nbsp;</span> <input type="checkbox" ng-model="group.Checked" />
-                                    <span style="font-weight:bold;">{{group.Name}}</span>
+                                    <span style="font-weight:bold;font-size:18px;" ng-cloak>{{group.Index}}:&nbsp;</span> <input type="checkbox" ng-model="group.Checked" />
+                                    <span style="font-weight:bold;" ng-cloak>{{group.Name}}</span>
                                     <a class="btn btn-success" ng-if="group.Teams.length > 0" ng-disabled="group.Checked==false" data-toggle="collapse" data-parent="#tabGroupAndTeam" href="#{{group.Id}}">Teams</a>
 
                                     <div id="{{group.Id}}" class="panel-collapse collapse">
                                         <div class="col-md-12" ng-repeat="team in group.Teams">
-                                            <input type="checkbox" ng-model="team.Checked" /><span>{{team.Name}}</span>
+                                            <input type="checkbox" ng-model="team.Checked" /><span ng-cloak>{{team.Name}}</span>
                                         </div>
                                     </div>
 
