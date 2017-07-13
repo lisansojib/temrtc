@@ -1,0 +1,364 @@
+@{
+    Layout = "~/Views/Shared/_UserLayout.cshtml";
+    string Id = ViewBag.Id;
+    string GTType = ViewBag.GTType;
+    string GTName = ViewBag.GTName;
+    string title = Languages.Get("File Library");
+    if (GTType != "File")
+    {
+        title = String.Format("{2} for {0}: {1}", GTType, GTName, Languages.Get("File Library"));
+    }
+
+
+    ViewBag.Title = title;
+    ViewBag.Header = title;
+
+    string userid = WebRTCLib.Utils.Helper.CurrentUser.User.Id;
+}
+
+<input type="hidden" id="hiddenId" value="@Id" />
+<input type="hidden" id="hiddenGTType" value="@GTType" />
+<input type="hidden" id="hiddenUserID" value="@userid"/>
+
+<div ng-controller="fileLibraryCtrl">
+    <div>
+        <button type="button" class="btn btn-success btn-sm" title="Upload File" ng-click="openUploadFile();">
+            <span class="glyphicon glyphicon-plus"></span>@Languages.Get("Upload File")
+        </button>
+        <button type="button" class="btn btn-success btn-sm" title="New Folder" ng-click="openNewFolder();">
+            <span class="glyphicon glyphicon-plus"></span>@Languages.Get("New Folder")
+        </button>
+        <button type="button" class="btn btn-success btn-sm" title="Choose From File Library" ng-if="GTType!='File'" ng-click="openChooseFileLibrary();">
+            <span class="glyphicon glyphicon-plus"></span>Choose From File Library
+        </button>
+
+        <select class="form-control" style="display:inline-block;width:150px;position:absolute;right:20px;" ng-model="fileView" ng-options="view.value as view.label for view in fileViewList"></select>
+    </div>
+    <div style="margin-top:5px;margin-bottom:5px;">
+        <span ng-repeat="folder in navFolders">
+            <a href="javascript:void(0);" ng-click="chooseFolder(folder);">{{folder.Name}}</a>
+            <span ng-if="folder.Discriminator!='LastOne'">&gt;</span>
+        </span>
+    </div>
+    <table class="table" ng-if="fileView=='list'">
+        <thead>
+            <tr>          
+                <th style="width:20px;">
+                    <input type="checkbox" />
+                </th>      
+                <th>File Name</th>
+                <th ng-if="GTType!='File'">Uploader</th>
+                <th>Size</th>        
+                <th>Create On</th>        
+                <th style="width:100px;text-align:center;">Options</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr ng-repeat="folder in folders">
+                <td>
+                    <input type="checkbox" />
+                </td>
+                <td>
+                    <span class="glyphicon glyphicon-folder-open" style="color:rgba(228, 170, 0, 0.99);"></span>
+                    <a href="javascript:void(0);" style="margin-left:5px;" ng-click="chooseFolder(folder);">{{folder.Name}}</a>
+                </td>
+                <td ng-if="GTType!='File'">
+                    <span style="font-weight:bold;">{{folder.UserName}}</span>
+                </td>
+                <td>-</td>
+                <td>{{folder.CreateOnStr}}</td>
+                <td style="text-align:center;">
+                    <button type="button" class="btn btn-success btn-sm" title="Rename this folder" style="" ng-if="folder.UserID=='@userid'" ng-click="openRename('Folder',folder.Name,folder.Id);">
+                        <span class="glyphicon glyphicon-edit"></span>
+                    </button>
+                    <button type="button" class="btn btn-danger btn-sm" title="Delete this folder" style="" ng-if="folder.UserID=='@userid'" ng-click="openDelete('Folder',folder.Name,folder.Id);">
+                        <span class="glyphicon glyphicon-trash"></span>
+                    </button>
+                    <span ng-if="folder.UserID!='@userid'">N/A</span>
+                </td>
+            </tr>
+            <tr ng-repeat="file in files">
+                <td>
+                    <input type="checkbox" />
+                </td>
+                <td>              
+                    <span ng-if="file.FileType=='PDF'" class="fa fa-file-pdf-o fa-fw" style="color:#E21010;"></span>    
+                    <span ng-if="file.FileType=='Image'" class="fa fa-file-picture-o fa-fw" style="color:#E21010;"></span> 
+                    <span ng-if="file.FileType=='Other'" class="fa fa-file fa-fw" style="color:#E21010;"></span>       
+                    @*<a ng-href="/Content/UploatAttachment/{{file.SaveFileName}}" target="_blank">{{file.FileName}}</a>*@
+                    <a href="javascript:void(0);" ng-click="openIframeFile(file.SaveFileName);">{{file.FileName}}</a>
+                </td>
+                <td ng-if="GTType!='File'">
+                    <span style="font-weight:bold;">{{file.UserName}}</span>
+                </td>
+                <td>{{file.FileSize}}</td>
+                <td>{{file.CreateOnStr}}</td>
+                <td style="text-align:center;">
+                    <button type="button" class="btn btn-success btn-sm" title="Rename this file" style="" ng-click="openRename('File',file.FileName,file.Id);" ng-if="file.UserID=='@userid'">
+                        <span class="glyphicon glyphicon-edit"></span>
+                    </button>
+                    <button type="button" class="btn btn-danger btn-sm" title="Delete this file" style="" ng-click="openDelete('File',file.FileName,file.Id);" ng-if="file.UserID=='@userid'">
+                        <span class="glyphicon glyphicon-trash"></span>
+                    </button>
+                    <span ng-if="file.UserID!='@userid'">N/A</span>
+                </td>
+            </tr>            
+        </tbody>
+    </table>
+
+    <div ng-if="fileView=='preview'">
+        <div ng-repeat="folder in folders" context-menu="menuOptionsFolder" style="float:left;width:150px;cursor:pointer;text-align:center;">
+            <div>
+                <img src="~/Content/Images/fileview-folder.png" ng-click="chooseFolder(folder);"/>
+            </div>
+            <a href="javascript:void(0);" style="margin-left:5px;" ng-click="chooseFolder(folder);">{{folder.Name}}</a>
+        </div>
+        <div ng-repeat="file in files" context-menu="menuOptionsFile" style="float:left;width:150px;cursor:pointer;text-align:center;">
+            <div>             
+                <img ng-if="file.FileType=='PDF'" src="~/Content/Images/fileview-pdf.png"/>
+                <img ng-if="file.FileType=='Image'" ng-src="/Content/UploatAttachment/{{file.SaveFileName}}" style="height:110px;"/>
+                <img ng-if="file.FileType=='Other'" src="~/Content/Images/fileview-other.png"/>
+            </div>
+            @*<a ng-href="/Content/UploatAttachment/{{file.SaveFileName}}" target="_blank">{{file.FileName}}</a>*@
+            <a href="javascript:void(0);" ng-click="openIframeFile(file.SaveFileName);">{{file.FileName}}</a>
+        </div>
+    </div>
+
+    <!--Modal  New Folder-->
+    <div class="modal fade" id="modalNewFolder" tabindex="-1" role="dialog" aria-labelledby="modalNewFolderLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
+                    <h4 class="modal-title" id="modalNewFolderLabel">New Folder</h4>
+                </div>
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label class="control-label">Folder Name:</label><br />
+                        <input type="text" class="form-control" ng-model="folderAdd.Name" />
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" ng-click="submitNewFolder();">Confirm</button>
+                </div>
+            </div><!-- /.modal-content -->
+        </div>
+    </div>
+    <!-- /.modal -->
+
+    <!--Modal  New Folder-->
+    <div class="modal fade" id="modelOpenFileByIframe" tabindex="-1" role="dialog" aria-labelledby="modelOpenFileByIframeLabel" aria-hidden="true">
+        <div class="modal-dialog" style="width:90%;position:fixed;left:10px;top:10px;right:10px;bottom:10px;">
+            <div class="modal-content" style="height:100%;">
+                <div class="modal-header">
+                    <button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
+                    <h4 class="modal-title" id="modelOpenFileByIframeLabel">@Languages.Get("Open File")</h4>
+                </div>
+                <div class="modal-body" style="height:80%;">
+                    <iframe id="iframeOpenfile" style="width:100%;height:100%;"></iframe>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-default" data-dismiss="modal">@Languages.Get("Close")</button>               
+                </div>
+            </div><!-- /.modal-content -->
+        </div>
+    </div>
+    <!-- /.modal -->
+
+
+    <!--Modal Upload File-->
+    <div class="modal fade" id="modalUploadFile" tabindex="-1" role="dialog" aria-labelledby="modalUploadFileLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
+                    <h4 class="modal-title" id="modalUploadFileLabel">Upload File</h4>
+                </div>
+                <div class="modal-body">
+                    <div class="form-group">
+                        <input type="file" ngf-select="true" ngf-change="onUploadFile($files)" />
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>                    
+                </div>
+            </div><!-- /.modal-content -->
+        </div>
+    </div>
+    <!-- /.modal -->
+
+    <!--Modal Delete-->
+    <div class="modal fade" id="modalDeleteFolderOrFile" tabindex="-1" role="dialog" aria-labelledby="modalDeleteFolderOrFileLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
+                    <h4 class="modal-title" id="modalDeleteFolderOrFileLabel">Delete {{deleteEntry.type}}</h4>
+                </div>
+                <div class="modal-body">
+                    <h4>Are you sure delete {{deleteEntry.type}}: <span style="color:red;">{{deleteEntry.name}}</span> ?</h4>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" ng-click="submitDelete();">Confirm</button>
+                </div>
+            </div><!-- /.modal-content -->
+        </div>
+    </div>
+    <!-- /.modal -->
+
+    <!--Modal Rename-->
+    <div class="modal fade" id="modalRename" tabindex="-1" role="dialog" aria-labelledby="modalRenameLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
+                    <h4 class="modal-title" id="modalRenameLabel">Rename {{renameEntry.type}}</h4>
+                </div>
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label class="control-label">Current Name:</label><br />
+                        <input type="text" class="form-control" ng-model="renameEntry.oldName" readonly/>
+                    </div>
+                    <div class="form-group">
+                        <label class="control-label">New Name:</label><br />
+                        <input type="text" class="form-control" ng-model="renameEntry.newName" />
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" ng-click="submitRename();">Confirm</button>
+                </div>
+            </div><!-- /.modal-content -->
+        </div>
+    </div>
+    <!-- /.modal -->
+
+    <!--Modal Choose File-->
+    <div class="modal fade" id="modalOpenChooseFileLibrary" tabindex="-1" role="dialog" aria-labelledby="modalOpenChooseFileLibraryLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
+                    <h4 class="modal-title" id="modalOpenChooseFileLibraryLabel">Choose File From File Library</h4>
+                </div>
+                <div class="modal-body">
+                    <div style="margin-top:5px;margin-bottom:5px;">
+                        <span ng-repeat="folder in navFolders2">
+                            <a href="javascript:void(0);" ng-click="chooseFolder2(folder);">{{folder.Name}}</a>
+                            <span ng-if="folder.Discriminator!='LastOne'">&gt;</span>
+                        </span>
+                    </div>
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th style="width:20px;">
+
+                                </th>
+                                <th>File Name</th>
+                                <th>Size</th>
+                                <th>Create On</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr ng-repeat="folder in folders2">
+                                <td></td>
+                                <td>
+                                    <span class="glyphicon glyphicon-folder-open" style="color:rgba(228, 170, 0, 0.99);"></span>
+                                    <a href="javascript:void(0);" style="margin-left:5px;" ng-click="chooseFolder2(folder);">{{folder.Name}}</a>
+                                </td>
+                                <td>-</td>
+                                <td>{{folder.CreateOnStr}}</td>
+                            </tr>
+                            <tr ng-repeat="file in files2">
+                                <td>
+                                    <input type="checkbox" ng-model="file.Check" />
+                                </td>
+                                <td>
+                                    <span ng-if="file.FileType=='PDF'" class="fa fa-file-pdf-o fa-fw" style="color:#E21010;"></span>
+                                    <span ng-if="file.FileType=='Image'" class="fa fa-file-picture-o fa-fw" style="color:#E21010;"></span>
+                                    <span ng-if="file.FileType=='Other'" class="fa fa-file fa-fw" style="color:#E21010;"></span>
+                                    <a ng-href="/Content/UploatAttachment/{{file.SaveFileName}}" target="_blank">{{file.FileName}}</a>
+                                </td>
+                                <td>{{file.FileSize}}</td>
+                                <td>{{file.CreateOnStr}}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" ng-click="submitChooseFile();">Confirm</button>
+                </div>
+            </div><!-- /.modal-content -->
+        </div>
+    </div>
+    <!-- /.modal -->
+
+
+    <!--Modal Share-->
+    <div class="modal fade" id="modalShare" tabindex="-1" role="dialog" aria-labelledby="modalShareLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
+                    <h4 class="modal-title" id="modalShareLabel">Share</h4>
+                </div>
+                <div class="modal-body">
+                    <ul id="myTab" class="nav nav-tabs">
+                        <li class="active"><a href="#tabContacts" data-toggle="tab">Contacts</a></li>
+                        <li><a href="#tabGroupAndTeam" data-toggle="tab">Group &amp; Team</a></li>
+                    </ul>
+                    <div id="myTabContent" class="tab-content">
+                        <div class="tab-pane fade in active" id="tabContacts">   
+                            <table class="table">
+                                <thead>
+                                    <tr>
+                                        <th style="width:20px;"></th>
+                                        <th>Contact UserName</th>
+                                        <th>Contact FullName</th>                                                                               
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr ng-repeat="contact in contacts">
+                                        <td>
+                                            <input type="checkbox" ng-model="contact.Checked" />
+                                        </td>
+                                        <td>{{contact.ContactUserName}}</td>
+                                        <td>{{contact.ContactFullName}}</td>
+                                    </tr>
+                                </tbody>
+                            </table>                         
+                        </div>
+                        <div class="tab-pane fade" id="tabGroupAndTeam">      
+                            <div class="col-md-12" ng-repeat="group in groups">
+                                <div class="col-md-12" style="margin-bottom:10px;">
+                                    <span style="font-weight:bold;font-size:18px;">{{group.Index}}:&nbsp;</span> <input type="checkbox" ng-model="group.Checked" />
+                                    <span style="font-weight:bold;">{{group.Name}}</span>
+                                    <a class="btn btn-success" ng-if="group.Teams.length > 0" ng-disabled="group.Checked==false" data-toggle="collapse" data-parent="#tabGroupAndTeam" href="#{{group.Id}}">Teams</a>
+
+                                    <div id="{{group.Id}}" class="panel-collapse collapse">
+                                        <div class="col-md-12" ng-repeat="team in group.Teams">
+                                            <input type="checkbox" ng-model="team.Checked" /><span>{{team.Name}}</span>
+                                        </div>
+                                    </div>
+
+                                </div>
+                            </div>                  
+                        </div>
+                    </div>
+
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-danger" style="float:left;" ng-click="clearShare();">Clear</button>
+                    <button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" ng-click="submitShare();">Share</button>
+                </div>
+            </div><!-- /.modal-content -->
+        </div>
+    </div>
+    <!-- /.modal -->
+
+</div>
+<script type="text/javascript" src="/app/fileLibraryCtrl.js?date=@DateTime.Now.Second"></script>
